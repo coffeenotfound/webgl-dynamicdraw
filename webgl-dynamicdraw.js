@@ -230,6 +230,8 @@ WebGLDynamicDraw.VertexAttrib.prototype = {
 	},
 };
 
-var WebGLDynamicDraw.QueuedDraw = function() {
+/*
+WebGLDynamicDraw.QueuedDraw = function() {
 	
 };
+*/

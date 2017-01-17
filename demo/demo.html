@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>WebGL Dynamic Draw Demo</title>
+	
+	<script src="nebgl.js"></script>
+</head>
+
+<body>
+	<canvas id="democanvas"></canvas>
+	
+	<!-- DEMO SCRIPT -->
+	<script>
+		var canvas = document.getElementById("democanvas");
+		
+		// create context
+		var gl = NebGL.createGL(canvas, { width: 720, height: 720 });
+		var gli = null;
+		
+		if(!gl) {
+			throw "WebGL context creation failed: webgl may be unsupported";
+		}
+		
+		(function() {
+			// init
+			init();
+			
+			// start main loop
+			requestAnimationFrame(animate);
+		})();
+		
+		function init() {
+			// create webgl dynamicdraw
+			gli = new WebGLDynamicDraw(gl);
+		}
+		
+		// main loop
+		function animate() {
+			// request next frame
+			requestAnimationFrame(animate);	
+			
+			// clear
+			gl.clearColor(0, 0, 0, 1);
+			gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+			
+			gli.begin(gl.QUAD);
+			
+			// add vertices
+			
+		}
+	</script>
+</body>
+</html>
