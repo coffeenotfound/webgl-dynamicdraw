@@ -44,7 +44,7 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 		inStartEnd: false,
 		currentPrimityMode: 0,
 		
-		recordArrayAttribOffsets = [],
+		recordArrayAttribOffsets: [],
 		recordArrayVertexStride: 0,
 		recordArrayStartPos: 0,
 		recordArrayPos: 0,
