@@ -1,10 +1,10 @@
-var WebGLIntermediate = function(gl) {
+var WebGLDynamicDraw = function(gl) {
 	this.gl = gl;
 	
 	// query info
 	//gl.getParameter(gl.MAX_VERTEX_ATTRIBS)
 };
-WebGLIntermediate.prototype = {
+WebGLDynamicDraw.prototype = {
 	/** Starts recording vertices with the given  */
 	begin: function(primitivetype, context) {
 		context = context || this._defaultContext();
@@ -36,7 +36,7 @@ WebGLIntermediate.prototype = {
 	},
 	
 	createContext: function() {
-		var context = new WebGLIntermediate.IntermediateContext(this);
+		var context = new WebGLDynamicDraw.IntermediateContext(this);
 		return context;
 	},
 	destroyContext: function(context) {
@@ -53,14 +53,14 @@ WebGLIntermediate.prototype = {
 };
 
 // context contains cached state
-var WebGLIntermediate.IntermediateContext = function(gli) {
+var WebGLDynamicDraw.IntermediateContext = function(gli) {
 	this.gli = gli;
 	this.gl = gli.gl;
 	
 	this.attribs = new Array(gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
 	this.recordArrayAttribOffsets = new Array(gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
 };
-WebGLIntermediate.IntermediateContext.prototype = {
+WebGLDynamicDraw.IntermediateContext.prototype = {
 	
 	// ### NOTES ###
 	// - mapping doesn't exist in webgl
@@ -237,16 +237,16 @@ WebGLIntermediate.IntermediateContext.prototype = {
 		// ensure
 		var attrib = this.state.attribs[index];
 		if(!attrib) {
-			attrib = this.state.attribs[index] = new WebGLIntermediate.VertexAttrib(index);
+			attrib = this.state.attribs[index] = new WebGLDynamicDraw.VertexAttrib(index);
 		}
 		return attrib;
 	},
 };
 
-var WebGLIntermediate.VertexAttrib = function(index) {
+var WebGLDynamicDraw.VertexAttrib = function(index) {
 	this.index = index;
 };
-WebGLIntermediate.VertexAttrib.prototype = {
+WebGLDynamicDraw.VertexAttrib.prototype = {
 	index: 0,
 	size: 0,
 	type: 0,
@@ -261,6 +261,6 @@ WebGLIntermediate.VertexAttrib.prototype = {
 	},
 };
 
-var WebGLIntermediate.QueuedDraw = function() {
+var WebGLDynamicDraw.QueuedDraw = function() {
 	
 };
