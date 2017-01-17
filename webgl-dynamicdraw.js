@@ -17,8 +17,8 @@ var WebGLDynamicDraw = {
 WebGLDynamicDraw.DynamicDrawContext = function(gl) {
 	this.gl = gl;
 	
-	this.attribs = new Array(gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
-	this.recordArrayAttribOffsets = new Array(gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
+	this.state.attribs = new Array(gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
+	this.state.recordArrayAttribOffsets = new Array(gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
 };
 WebGLDynamicDraw.DynamicDrawContext.prototype = {
 	
