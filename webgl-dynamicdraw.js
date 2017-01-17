@@ -36,7 +36,7 @@ WebGLDynamicDraw.prototype = {
 	},
 	
 	createContext: function() {
-		var context = new WebGLDynamicDraw.IntermediateContext(this);
+		var context = new WebGLDynamicDraw.DynamicDrawContext(this);
 		return context;
 	},
 	destroyContext: function(context) {
@@ -53,14 +53,14 @@ WebGLDynamicDraw.prototype = {
 };
 
 // context contains cached state
-var WebGLDynamicDraw.IntermediateContext = function(gli) {
+var WebGLDynamicDraw.DynamicDrawContext = function(gli) {
 	this.gli = gli;
 	this.gl = gli.gl;
 	
 	this.attribs = new Array(gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
 	this.recordArrayAttribOffsets = new Array(gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
 };
-WebGLDynamicDraw.IntermediateContext.prototype = {
+WebGLDynamicDraw.DynamicDrawContext.prototype = {
 	
 	// ### NOTES ###
 	// - mapping doesn't exist in webgl
