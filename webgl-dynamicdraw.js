@@ -101,7 +101,7 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 		// check if recordarray has enough space for entire vertex index (all active attribs)
 		var newRecordArrayPos = this.state.recordArrayPos + this.state.recordArrayVertexStride;
 		
-		if(this.state.recordArray.length <= newRecordArrayPos) {
+		if(newRecordArrayPos <= this.state.recordArray.length) {
 			// write to array
 			var writePos = this.state.recordArrayPos;
 			var recordArray = this.state.recordArray;
@@ -114,11 +114,15 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 				this.state.recordArrayPos = newRecordArrayPos;
 			}
 		}
-		else {
+		else { // recordArray full
 			// draw
 			var drawFirst = this.state.recordArrayStartPos;
 			var drawCount = this.state.recordArrayPos - this.state.recordArrayStartPos;
 			this._flushDraw(drawFirst, drawCount);
+			
+			// reset recordArray
+			this.state.recordArrayStartPos = 0;
+			this.state.recordArrayPos = 0;
 			
 			// add to new buffer
 			this.addVertex3(index, x, y, z);
