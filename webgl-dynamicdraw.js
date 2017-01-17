@@ -1,61 +1,21 @@
-var WebGLDynamicDraw = function(gl) {
-	this.gl = gl;
+
+var WebGLDynamicDraw = {
 	
-	// query info
-	//gl.getParameter(gl.MAX_VERTEX_ATTRIBS)
-};
-WebGLDynamicDraw.prototype = {
-	/** Starts recording vertices with the given  */
-	begin: function(primitivetype, context) {
-		context = context || this._defaultContext();
-		context.begin(primitivetype);
-	},
-	
-	end: function(context) {
-		context = context || this._defaultContext();
-		context.end();
-	},
-	
-	/** Adds a vertex with three components to the vertex attribute attrib */
-	addVertex3: function(attrib, x, y, z) {
-		context = context || this._defaultContext();
-		context.addVertex3(attrib, x, y, z);
-	},
-	/** Adds one or more vertices with three components from the given (typed) array to the vertex attribute attrib */
-	addVertices3: function(attrib, vertices, count, offset, stride) {
-		
-	},
-	addVerticesOffset3: function(attrib, vertices, count, offset, stride) {
-		
-	},
-	
-	/** Changes the configuration of vertex attribute */
-	vertexAttrib: function(attrib, size, type) {
-		context = context || this._defaultContext();
-		context.vertexAttrib(stream, attrib, size, type);
-	},
-	
-	createContext: function() {
-		var context = new WebGLDynamicDraw.DynamicDrawContext(this);
+	createContext: function(gl) {
+		var context = new WebGLDynamicDraw.DynamicDrawContext(gl);
 		return context;
 	},
+	
 	destroyContext: function(context) {
 		if(context) {
 			context._destroy();
 		}
 	},
-	
-	_defaultContext: function() {
-		var ctx = this._defaultctx;
-		if(!ctx) ctx = this._defaultctx = this.createContext();
-		return ctx;
-	},
 };
 
 // context contains cached state
-var WebGLDynamicDraw.DynamicDrawContext = function(gli) {
-	this.gli = gli;
-	this.gl = gli.gl;
+var WebGLDynamicDraw.DynamicDrawContext = function(gl) {
+	this.gl = gl;
 	
 	this.attribs = new Array(gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
 	this.recordArrayAttribOffsets = new Array(gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
