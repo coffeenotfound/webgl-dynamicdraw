@@ -1,8 +1,8 @@
 var WebGLIntermediate = function(gl) {
 	this.gl = gl;
 	
-	// query extension support
-	
+	// query info
+	//gl.getParameter(gl.MAX_VERTEX_ATTRIBS)
 };
 WebGLIntermediate.prototype = {
 	/** Starts recording vertices with the given  */
@@ -57,7 +57,8 @@ var WebGLIntermediate.IntermediateContext = function(gli) {
 	this.gli = gli;
 	this.gl = gli.gl;
 	
-	// create state object
+	this.attribs = new Array(gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
+	this.recordArrayAttribOffsets = new Array(gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
 };
 WebGLIntermediate.IntermediateContext.prototype = {
 	
@@ -70,26 +71,25 @@ WebGLIntermediate.IntermediateContext.prototype = {
 	
 	state: {
 		// config state
-		attribs: [
-			// attrib {
-			//   index,
-			//   size,
-			//   type,
-			//   normalized,
-			//   
-			//   recordArray,
-			//   buffer,
-			// }
-		],
+		attribs: [],
+		
+		// state
+		recordArray: new Float32Array(256),
+		bufferSize: 256,
+		bufferTypeBytes: 4,
+		bufferPos: 0,
+		buffer: null,
 		
 		// temporary state
 		inStartEnd: false,
 		currentPrimityMode: 0,
 		
-		lastAccessedAttrib: null,
-		
-		//attribIdsToDraw = [],
-	}, 
+		recordArrayAttribOffsets = [],
+		recordArrayVertexStride: 0,
+		recordArrayStartPos: 0,
+		recordArrayPos: 0,
+		activeAttribNum: 0,
+	},
 	
 	/** Starts recording vertices with the given  */
 	begin: function(primitivemode) {
@@ -99,6 +99,22 @@ WebGLIntermediate.IntermediateContext.prototype = {
 		// set flag
 		this.state.inStartEnd = true;
 		this.state.currentPrimityMode = primitivemode;
+		
+		// calc recordArray attrib offsets
+		this.state.recordArrayVertexStride = 0;
+		for(var i = 0; i < this.state.attribs.length; i++) {
+			var attrib = this.state.attribs[i];
+			
+			if(attrib && attrib.enabled) {
+				this.state.recordArrayAttribOffsets[i] = this.state.recordArrayVertexStride;
+				this.state.recordArrayVertexStride += attrib.size;
+			}
+			else {
+				this.state.recordArrayAttribOffsets[i] = -1;
+			}
+		}
+		
+		this.state.recordArrayStartPos = this.state.recordArrayPos;
 	},
 	
 	end: function() {
@@ -107,88 +123,144 @@ WebGLIntermediate.IntermediateContext.prototype = {
 		// error: in start/end
 		if(this.state.inStartEnd) return;
 		
-		var attribsToDraw = [];
-		for(var i = 0; i < this.state.attribs.length; i++) {
-			var attr = this.state.attribs[i];
-			
-			if(attr && attr.recordPos > 0) {
-				attribsToDraw.push(attr);
-			}
-		}
-		
-		var vertexCount = 0;
-		
-		// upload recorded data and setup gl vertexattribs
-		for(var i = 0; i < attribsToDraw.length; i++) {
-			var attr = attribsToDraw[i];
-			
-			// find largest buffer
-			var vertNum = Math.floor(attr.recordPos / 3); // TODO: use divisor depending on primitve mode
-			if(vertNum > vertexCount) vertexCount = vertNum;
-			
-			// upload
-			gl.bindBuffer(gl.ARRAY_BUFFER);
-			gl.bufferData(attr.buffer, attr.recordBuffer.subarray(0, attr.recordPos), gl.STREAM_DRAW);
-			
-			// setup gl vertex attrib
-			gl.vertexAttribPointer(attr.index, attr.size, attr.normalized, 0, 0);
-		}
-		
-		// draw
-		gl.drawArrays(this.state.currentPrimitveMode, 0, vertexCount);
-		
-		// reset attribs
-		for(var i = 0; i < attribsToDraw.length; i++) {
-			attribsToDraw[i].recordPos = 0;
-		}
+		// flush draw
+		var drawFirst = this.state.recordArrayStartPos;
+		var drawCount = this.state.recordArrayPos - this.state.recordArrayStartPos;
+		this._flushDraw(drawFirst, drawCount);
 		
 		// set flag
 		this.state.inStartEnd = false;
 	},
 	
 	/** Adds a vertex with three components to the vertex attribute attrib */
-	addVertex3: function(attrib, x, y, z) {
-		// find attrib
-		var attrib = this.state.lastAccessedAttrib.index == index ? this.state.lastAccessedAttrib.index : this.state.attribs[attrib];
+	addVertex3: function(index, x, y, z) {
+		// ensure attrib enabled
+		var attrib = this.state.attribs[index];
+		if(!attrib || !attrib.enabled) throw "invalid attrib index: attrib " + index + " invalid or disabled";
 		
-		var recordArray = attrib.recordArray;
-		var recordPos = attrib.recordPos;
+		// check if recordarray has enough space for entire vertex index (all active attribs)
+		var newRecordArrayPos = this.state.recordArrayPos + this.state.recordArrayVertexStride;
 		
-		recordArray[recordPos] = x;
-		recordArray[recordPos + 1] = y;
-		recordArray[recordPos + 2] = z;
-		
-		// increment recordpos
-		attrib.recordPos += 3;
-		
-		this.state.lastAccessedAttrib = attrib;
+		if(this.state.recordArray.length <= newRecordArrayPos) {
+			// write to array
+			var writePos = this.state.recordArrayPos;
+			var recordArray = this.state.recordArray;
+			recordArray[writePos] = x;
+			recordArray[writePos + 1] = y;
+			recordArray[writePos + 2] = z;
+			
+			// only increment on attrib 0
+			if(index == 0) {
+				this.state.recordArrayPos = newRecordArrayPos;
+			}
+		}
+		else {
+			// draw
+			var drawFirst = this.state.recordArrayStartPos;
+			var drawCount = this.state.recordArrayPos - this.state.recordArrayStartPos;
+			this._flushDraw(drawFirst, drawCount);
+			
+			// add to new buffer
+			this.addVertex3(index, x, y, z);
+		}
 	},
 	
 	/** Changes the configuration of vertex attribute */
-	vertexAttrib: function(attrib, size, type, normalized) {
+	vertexAttrib: function(index, size, type, normalized) {
 		// error: in start/end
 		if(this.state.inStartEnd) throw "cannot change attrib while in start/end";
 		
-		var oldAttrib = this.state.attribs[attrib];
-		var oldBuffer = 
+		// get attrib
+		var attrib = this._ensureGetAttrib(index);
 		
-		// set state
-		var attrib = {
-			index: attrib,
-			size: size,
-			type: type,
-			normalized: normalized,
-			
-			buffer = oldBuffer || this.gl.createBuffer(),
-			//buffer = new WebGLIntermediate.IntermediateBuffer(),
-			recordArray = new Float32Array(256),
-			recordPos = 0,
-		};
-		this.state.attribs[attrib] = attrib;
+		// update
+		attrib._update(size, type, normalized);
 	},
+	
+	enableVertexAttrib: function(index, enabled) {
+		var attrib = _ensureGetAttrib(index);
+		
+		attrib.enabled = enabled;
+	},
+	
 	
 	/** Initializes or re-initialized this context with the current state. */
 	init: function() {
 		
 	},
+	
+	_flushDraw: function(first, count) {
+		var componentsToDraw = count;
+		
+		// bind buffer
+		gl.bindBuffer(gl.ARRAY_BUFFER, this.state.buffer);
+		
+		while(componentsToDraw > 0) {
+			var numIndicesCanDrawNow = Math.floor((this.state.bufferSize - this.state.bufferPos) / this.state.recordArrayVertexStride);
+			
+			// upload
+			var dataToUpload = this.state.recordArray.subarray(this.state.recordArrayStartPos, this.state.recordArrayPos);
+			gl.bufferSubData(gl.ARRAY_BUFFER, this.state.bufferPos*this.state.bufferTypeBytes, dataToUpload);
+			
+			// setup vertexattribpointers
+			for(var j = 0; j < this.state.recordArrayAttribOffsets.length; j++) {
+				var offset = this.state.recordArrayAttribOffsets[j];
+				
+				if(offset >= 0) {
+					var attrib = this.state.attribs[j];
+					
+					gl.vertexAttribPointer(j, attrib.size, attrib.type, attrib.normalized, this.state.recordArrayVertexStride, this.state.bufferPos);
+				}
+			}
+			
+			// actually do the draw
+			gl.drawArrays(this.state.currentPrimitiveMode, 0, numIndicesCanDrawNow);
+			
+			// increment/decrement
+			this.state.bufferPos += dataToUpload.length;
+			componentsToDraw -= numIndicesCanDrawNow * this.state.recordArrayVertexStride;
+			
+			// orphan
+			if(componentsToDraw > 0) {
+				gl.bufferData(gl.ARRAY_BUFFER, null, gl.DYNAMIC_DRAW);
+				gl.bufferData(gl.ARRAY_BUFFER, this.state.bufferSize, gl.DYNAMIC_DRAW);
+				
+				this.state.bufferPos = 0;
+			}
+		}
+	},
+	
+	_ensureGetAttrib: function(index) {
+		// check index range
+		// if(that) throw "invalid vertex attrib index: " + index;
+		
+		// ensure
+		var attrib = this.state.attribs[index];
+		if(!attrib) {
+			attrib = this.state.attribs[index] = new WebGLIntermediate.VertexAttrib(index);
+		}
+		return attrib;
+	},
+};
+
+var WebGLIntermediate.VertexAttrib = function(index) {
+	this.index = index;
+};
+WebGLIntermediate.VertexAttrib.prototype = {
+	index: 0,
+	size: 0,
+	type: 0,
+	normalized: false,
+	
+	enabled: false,
+	
+	_update: function(size, type, normalized) {
+		this.size = size;
+		this.type = type;
+		this.normalized = normalized;
+	},
+};
+
+var WebGLIntermediate.QueuedDraw = function() {
+	
 };
