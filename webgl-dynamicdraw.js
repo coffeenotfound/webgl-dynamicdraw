@@ -80,8 +80,8 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 	end: function() {
 		var gl = this.gl;
 		
-		// error: in start/end
-		if(this.state.inStartEnd) return;
+		// error: not in start/end
+		if(!this.state.inStartEnd) return;
 		
 		// flush draw
 		var drawFirst = this.state.recordArrayStartPos;
