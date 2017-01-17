@@ -125,6 +125,15 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 		}
 	},
 	
+	// TODO: implement functions
+	/** Adds one or more vertices with three components from the given (typed) array to the vertex attribute attrib */
+	addVertices3: function(attrib, vertices, count, offset, stride) {
+		
+	},
+	addVerticesOffset3: function(attrib, vertices, count, offset, stride) {
+		
+	},
+	
 	/** Changes the configuration of vertex attribute */
 	vertexAttrib: function(index, size, type, normalized) {
 		// error: in start/end
