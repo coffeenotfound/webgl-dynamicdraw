@@ -212,7 +212,7 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 	},
 };
 
-var WebGLDynamicDraw.VertexAttrib = function(index) {
+WebGLDynamicDraw.VertexAttrib = function(index) {
 	this.index = index;
 };
 WebGLDynamicDraw.VertexAttrib.prototype = {
