@@ -14,7 +14,7 @@ var WebGLDynamicDraw = {
 };
 
 // context contains cached state
-var WebGLDynamicDraw.DynamicDrawContext = function(gl) {
+WebGLDynamicDraw.DynamicDrawContext = function(gl) {
 	this.gl = gl;
 	
 	this.attribs = new Array(gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
