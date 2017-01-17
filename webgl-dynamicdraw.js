@@ -163,13 +163,23 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 	},
 	
 	_flushDraw: function(first, count) {
-		var componentsToDraw = count;
+		var gl = this.gl;
+		
+		// ensure buffer exists
+		if(!this.state.buffer) {
+			this.state.buffer = gl.createBuffer();
+			gl.bindBuffer(gl.ARRAY_BUFFER, this.state.buffer);
+			gl.bufferData(gl.ARRAY_BUFFER, this.state.bufferSize*this.state.bufferTypeBytes, gl.DYNAMIC_DRAW);
+		}
 		
 		// bind buffer
 		gl.bindBuffer(gl.ARRAY_BUFFER, this.state.buffer);
 		
+		var componentsToDraw = count;
+		
 		while(componentsToDraw > 0) {
 			var numIndicesCanDrawNow = Math.floor((this.state.bufferSize - this.state.bufferPos) / this.state.recordArrayVertexStride);
+			if(numIndicesCanDrawNow > (count / this.state.recordArrayVertexStride)) numIndicesCanDrawNow = (count / this.state.recordArrayVertexStride);
 			
 			// upload
 			var dataToUpload = this.state.recordArray.subarray(this.state.recordArrayStartPos, this.state.recordArrayPos);
@@ -182,7 +192,7 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 				if(offset >= 0) {
 					var attrib = this.state.attribs[j];
 					
-					gl.vertexAttribPointer(j, attrib.size, attrib.type, attrib.normalized, this.state.recordArrayVertexStride, this.state.bufferPos);
+					gl.vertexAttribPointer(j, attrib.size, attrib.type, attrib.normalized, this.state.recordArrayVertexStride*this.state.bufferTypeBytes, this.state.bufferPos*this.state.bufferTypeBytes);
 				}
 			}
 			
@@ -195,8 +205,8 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 			
 			// orphan
 			if(componentsToDraw > 0) {
-				gl.bufferData(gl.ARRAY_BUFFER, null, gl.DYNAMIC_DRAW);
-				gl.bufferData(gl.ARRAY_BUFFER, this.state.bufferSize, gl.DYNAMIC_DRAW);
+				//gl.bufferData(gl.ARRAY_BUFFER, null, gl.DYNAMIC_DRAW);
+				gl.bufferData(gl.ARRAY_BUFFER, this.state.bufferSize*this.state.bufferTypeBytes, gl.DYNAMIC_DRAW);
 				
 				this.state.bufferPos = 0;
 			}
