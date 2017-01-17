@@ -151,7 +151,7 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 	},
 	
 	enableVertexAttrib: function(index, enabled) {
-		var attrib = _ensureGetAttrib(index);
+		var attrib = this._ensureGetAttrib(index);
 		
 		attrib.enabled = enabled;
 	},
