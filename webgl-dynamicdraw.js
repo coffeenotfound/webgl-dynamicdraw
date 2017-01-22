@@ -1,4 +1,11 @@
 
+//
+// TERM EXPLANATION:
+// - components: float vector components, i.e. one vec3 vertex attrib is the size of three components (used to instead of raw byte sizes for convinienve)
+// - vertex attrib: either a gl vertex attribute or the size of some vertex attribute in components
+// - vertex index: a single 'vertex' consisting of one value of each vertex attrib for a single 'full vertex'
+// - vertex primitive: the number of vertex indices required to assemble one primitive of some kind (e.g.: TRIANGLES need three 'vertices' (vertex indices))
+
 var WebGLDynamicDraw = {
 	
 	createContext: function(gl) {
@@ -13,223 +20,226 @@ var WebGLDynamicDraw = {
 	},
 };
 
+
 // context contains cached state
 WebGLDynamicDraw.DynamicDrawContext = function(gl) {
 	this.gl = gl;
 	
-	this.state.attribs = new Array(gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
-	this.state.recordArrayAttribOffsets = new Array(gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
+	// create recordArray
+	this.recordArray = new WebGLDynamicDraw.RecordArray(this, 256);
+	
+	// create drawBuffer
+	this.drawBuffer = new WebGLDynamicDraw.DrawBuffer(this, 256);
+	
+	// query max vertex attribs
+	this.maxVertexAttribs = this.gl.getParameter(this.gl.MAX_VERTEX_ATTRIBS);
+	
+	// init vertex attribs array
+	this.vertexAttribs = new Array(this.maxVertexAttribs);
+	for(var i = 0; i < this.vertexAttribs.length; i++) {
+		var attrib = new WebGLDynamicDraw.VertexAttrib(i);
+		this.vertexAttribs[i] = attrib;
+	}
+	
+	// DEBUG: log
+	console.debug("created DynamicDrawContext:", this);
 };
 WebGLDynamicDraw.DynamicDrawContext.prototype = {
+	gl: null,
+	recordArray: null,
+	drawBuffer: null,
 	
-	// ### NOTES ###
-	// - mapping doesn't exist in webgl
-	// - buffersubdata causes an implicit flush
-	//   - consider flip-flopping two buffers
-	//	   - multiple start/ends a frame cycle through multiple buffers while still not drawn -> implicit flush again
-	// - orphaning seems to be the best bet
+	maxVertexAttribs: -1,
+	vertexAttribs: [],
 	
-	state: {
-		// config state
-		attribs: [],
+	currentPrimitiveMode: 0,
+	incrementingAttribIndex: 0, // the vertex attrib that increments the recordarray
+	
+	/** Starts recording vertices for primitives of the given type */
+	begin: function(primitivemode) {
+		// set state
+		this.currentPrimitiveMode = primitivemode;
 		
-		// state
-		recordArray: new Float32Array(256),
-		bufferSize: 256,
-		bufferTypeBytes: 4,
-		bufferPos: 0,
-		buffer: null,
+		// calc cached temp values
+		this.recordArray.setupTempValueCache();
 		
-		// temporary state
-		inStartEnd: false,
-		currentPrimityMode: 0,
-		
-		recordArrayPos: 0,
-		recordArrayStartPos: 0,
-		recordArrayVertexStride: 0,
-		recordArrayPrimitiveStride: 0,
-		recordArrayAttribOffsets: [],
-		recordAraryVertexIndex: 0,
+		// reset recordArray
+		this.recordArray.resetArray();
 	},
 	
-	/** Starts recording vertices with the given  */
-	begin: function(primitivemode) {
-		// error: in start/end
-		if(this.state.inStartEnd) throw "cannot invoke begin while in start/end";
+	/** Ends recording vertices and ensures all previously recorded vertices are drawn */
+	end: function() {
+		var cgl = this.gl;
 		
-		// set flag
-		this.state.inStartEnd = true;
-		this.state.currentPrimityMode = primitivemode;
+		// upload (and orphan)
+		cgl.bindBuffer(cgl.ARRAY_BUFFER, this.drawBuffer.buffer);
+		cgl.bufferData(cgl.ARRAY_BUFFER, this.recordArray.array, cgl.STREAM_DRAW);
 		
-		// calc recordArray attrib offsets
-		this.state.recordArrayVertexStride = 0;
-		for(var i = 0; i < this.state.attribs.length; i++) {
-			var attrib = this.state.attribs[i];
+		// setup vertexattribs
+		for(var i = 0; i < this.vertexAttribs.length; i++) {
+			var attrib = this.vertexAttribs[i];
 			
-			if(attrib && attrib.enabled) {
-				this.state.recordArrayAttribOffsets[i] = this.state.recordArrayVertexStride;
-				this.state.recordArrayVertexStride += attrib.size;
+			if(attrib.enabled) {
+				cgl.enableVertexAttribArray(i);
+				cgl.vertexAttribPointer(i, attrib.size, attrib.type, attrib.normalized, this.recordArray.tempVertexIndexStride*4, this.recordArray.tempAttribOffset[i]*4);
 			}
 			else {
-				this.state.recordArrayAttribOffsets[i] = -1;
+				cgl.disableVertexAttribArray(i);
 			}
 		}
 		
-		// calc recordArrayPrimitiveStride
-		switch(primitivemode) {
-			case gl.TRIANGLES: this.state.recordArrayPrimitiveStride = 3; break;
-			case gl.POINTS: this.state.recordArrayPrimitiveStride = 1; break;
-			case gl.LINES: this.state.recordArrayPrimitiveStride = 2; break;
-			case gl.QUADS: this.state.recordArrayPrimitiveStride = 4; break;
-			default: throw "unimplemented primitive stride";
-		}
+		// draw
+		var primitivesToDraw = this.recordArray.position / this.recordArray.tempVertexIndexStride;
 		
-		this.state.recordArrayStartPos = this.state.recordArrayPos;
-	},
-	
-	end: function() {
-		var gl = this.gl;
-		
-		// error: not in start/end
-		if(!this.state.inStartEnd) return;
-		
-		// flush draw
-		var drawFirst = this.state.recordArrayStartPos;
-		var drawCount = this.state.recordArrayPos - this.state.recordArrayStartPos;
-		this._flushDraw(drawFirst, drawCount);
-		
-		// set flag
-		this.state.inStartEnd = false;
+		cgl.drawArrays(this.currentPrimitiveMode, 0, primitivesToDraw);
 	},
 	
 	/** Adds a vertex with three components to the vertex attribute attrib */
 	addVertex3: function(index, x, y, z) {
-		// ensure attrib enabled
-		var attrib = this.state.attribs[index];
-		if(!attrib || !attrib.enabled) throw "invalid attrib index: attrib " + index + " invalid or disabled";
+		// record vertex
+		this.recordArray.putVec3(index, x, y, z);
 		
-		// put vertex
-		var writeOffset = this.state.recordArrayPos + this.state.recordArrayAttribOffsets[index];
-		this.state.recordArray[writeOffset + 0] = x;
-		this.state.recordArray[writeOffset + 1] = y;
-		this.state.recordArray[writeOffset + 2] = z;
-		
-		// increment pos if attrib 0 (0 is the incrementing attrib)
-		if(index == 0) {
-			this.state.recordArrayPos += this.state.recordArrayVertexStride;
-			
-			// if full, trigger draw and clear for next vertex add
-			if(this.state.recordArrayPos > this.state.recordArray.length) {
-				var drawFirst = this.state.recordArrayStartPos;
-				var drawCount = this.state.recordArrayPos - this.state.recordArrayStartPos;
-				this._flushDraw(drawFirst, drawCount);
-				
-				// reset recordArray
-				this.state.recordArrayStartPos = 0;
-				this.state.recordArrayPos = 0;
-			}
+		// increment index
+		if(index == this.incrementingAttribIndex) {
+			this.recordArray.incrementIndex();
 		}
-	},
-	
-	// TODO: implement functions
-	/** Adds one or more vertices with three components from the given (typed) array to the vertex attribute attrib */
-	addVertices3: function(attrib, vertices, count, offset, stride) {
-		
-	},
-	addVerticesOffset3: function(attrib, vertices, count, offset, stride) {
-		
 	},
 	
 	/** Changes the configuration of vertex attribute */
 	vertexAttrib: function(index, size, type, normalized) {
-		// error: in start/end
-		if(this.state.inStartEnd) throw "cannot change attrib while in start/end";
+		var attrib = this.vertexAttribs[index];
 		
-		// get attrib
-		var attrib = this._ensureGetAttrib(index);
-		
-		// update
-		attrib._update(size, type, normalized);
+		attrib.update(size, type, normalized);
 	},
 	
 	enableVertexAttrib: function(index, enabled) {
-		var attrib = this._ensureGetAttrib(index);
+		var attrib = this.vertexAttribs[index];
 		
 		attrib.enabled = enabled;
 	},
 	
-	/** Initializes or re-initialized this context with the current state. */
-	init: function() {
+	incrementingVertexAttrib: function(index) {
+		// TODO: do range check
 		
+		this.incrementingAttribIndex = index;
 	},
 	
-	_flushDraw: function(first, count) {
-		var gl = this.gl;
+	_destroy: function() {
 		
-		// ensure buffer exists
-		if(!this.state.buffer) {
-			this.state.buffer = gl.createBuffer();
-			gl.bindBuffer(gl.ARRAY_BUFFER, this.state.buffer);
-			gl.bufferData(gl.ARRAY_BUFFER, this.state.bufferSize*this.state.bufferTypeBytes, gl.DYNAMIC_DRAW);
-			
-			// DEBUG: log
-			console.debug("created buffer " + this.state.buffer);
-		}
-		
-		// bind buffer
-		gl.bindBuffer(gl.ARRAY_BUFFER, this.state.buffer);
-		
-		var componentsToDraw = count;
-		
-		while(componentsToDraw > 0) {
-			var numIndicesCanDrawNow = Math.floor((this.state.bufferSize - this.state.bufferPos) / this.state.recordArrayVertexStride);
-			if(numIndicesCanDrawNow > (count / this.state.recordArrayVertexStride)) numIndicesCanDrawNow = (count / this.state.recordArrayVertexStride);
-			
-			// upload
-			var dataToUpload = this.state.recordArray.subarray(this.state.recordArrayStartPos, this.state.recordArrayPos);
-			gl.bufferSubData(gl.ARRAY_BUFFER, this.state.bufferPos*this.state.bufferTypeBytes, dataToUpload);
-			
-			// setup vertexattribpointers
-			for(var j = 0; j < this.state.recordArrayAttribOffsets.length; j++) {
-				var offset = this.state.recordArrayAttribOffsets[j];
-				
-				if(offset >= 0) {
-					var attrib = this.state.attribs[j];
-					
-					gl.vertexAttribPointer(j, attrib.size, attrib.type, attrib.normalized, this.state.recordArrayVertexStride*this.state.bufferTypeBytes, this.state.bufferPos*this.state.bufferTypeBytes);
-				}
-			}
-			
-			// actually do the draw
-			gl.drawArrays(this.state.currentPrimitiveMode, 0, numIndicesCanDrawNow);
-			
-			// increment/decrement
-			this.state.bufferPos += dataToUpload.length;
-			componentsToDraw -= numIndicesCanDrawNow * this.state.recordArrayVertexStride;
-			
-			// orphan
-			if(componentsToDraw >= 0) {
-				//gl.bufferData(gl.ARRAY_BUFFER, null, gl.DYNAMIC_DRAW);
-				gl.bufferData(gl.ARRAY_BUFFER, this.state.bufferSize*this.state.bufferTypeBytes, gl.DYNAMIC_DRAW);
-				
-				this.state.bufferPos = 0;
-				continue;
-			}
-		}
-	},
-	
-	_ensureGetAttrib: function(index) {
-		// check index range
-		// if(that) throw "invalid vertex attrib index: " + index;
-		
-		// ensure
-		var attrib = this.state.attribs[index];
-		if(!attrib) {
-			attrib = this.state.attribs[index] = new WebGLDynamicDraw.VertexAttrib(index);
-		}
-		return attrib;
 	},
 };
+
+
+/** RecordArray records added vertices until draw time. Grows as needed */
+WebGLDynamicDraw.RecordArray = function(context, size) {
+	this.context = context;
+	this.size = size;
+	
+	// create array
+	this.array = new Float32Array(Math.ceil(size / this.pageSize) * this.pageSize);
+	
+	// DEBUG: log
+	console.debug("created recordarray with size=" + this.size);
+};
+WebGLDynamicDraw.RecordArray.prototype = {
+	context: null,
+	pageSize: 256,
+	
+	array: null, // the actual typed array
+	size: 0,
+	position: 0, // start position of current index in components
+	
+	tempVertexIndexStride: 0, // stride in components between vertex indicies
+	tempAttribOffset: [],
+	
+	putVec3: function(attrib, x, y, z) {
+		// write data
+		var writePos = this.position + this.tempAttribOffset[attrib];
+		this.array[writePos + 0] = x;
+		this.array[writePos + 1] = y;
+		this.array[writePos + 2] = z;
+	},
+	
+	/** increments the vertex index (with a stride of all active vertex attribs) */
+	incrementIndex: function() {
+		this.position += this.tempVertexIndexStride;
+		
+		// ensure size
+		this._ensureSize(this.position + 1);
+	},
+	
+	resetArray: function() {
+		this.position = 0;
+		
+		// *user is responsible for writing to each attrib*
+		//// zero out old values
+		//this.array.fill(0);
+	},
+	
+	/** recalculates some cached temporary values */
+	setupTempValueCache: function() {
+		// calc attrib offsets and indexstride
+		var newIndexStride = 0;
+		for(var i = 0; i < this.context.vertexAttribs.length; i++) {
+			var attrib = this.context.vertexAttribs[i];
+			
+			if(attrib.enabled) {
+				this.tempAttribOffset[i] = newIndexStride;
+				newIndexStride += attrib.size;
+			}
+			else {
+				this.tempAttribOffset[i] = -1;
+			}
+		}
+		
+		this.tempVertexIndexStride = newIndexStride;
+	},
+	
+	_ensureSize(requiredsize) {
+		if(requiredsize > this.size) {
+			// allocate new array
+			var newSize = Math.ceil(requiredSize / this.pageSize) * this.pageSize;
+			var newArray = new Float32Array(newSize);
+			
+			// DEBUG: log
+			console.debug("resizing recordarray: " + this.size + " -> " + newSize + " (required: " + requiredsize + ", pageSize=" + this.pageSize + ")");
+			
+			// copy old array
+			newArray.set(this.array);
+			
+			// set vars
+			this.array = newArray;
+			this.size = newSize;
+		}
+	}
+};
+
+
+WebGLDynamicDraw.DrawBuffer = function(context, size) {
+	this.context = context;
+	this.size = size; // size in components
+	
+	// create buffer
+	this.buffer = this.context.gl.createBuffer();
+};
+WebGLDynamicDraw.DrawBuffer.prototype = {
+	context: null,
+	
+	size: -1,
+	
+	buffer: null,
+	
+	/*
+	orphan: function(newSize) {
+		var cgl = this.context.gl;
+		
+		this.size = newSize;
+		
+		cgl.gl
+	},
+	*/
+};
+
 
 WebGLDynamicDraw.VertexAttrib = function(index) {
 	this.index = index;
@@ -242,7 +252,7 @@ WebGLDynamicDraw.VertexAttrib.prototype = {
 	
 	enabled: false,
 	
-	_update: function(size, type, normalized) {
+	update: function(size, type, normalized) {
 		this.size = size;
 		this.type = type;
 		this.normalized = normalized;
@@ -250,7 +260,15 @@ WebGLDynamicDraw.VertexAttrib.prototype = {
 };
 
 /*
-WebGLDynamicDraw.QueuedDraw = function() {
+WebGLDynamicDraw.AttribMemLayout = function() {
 	
+};
+WebGLDynamicDraw.AttribMemLayout.prototype = {
+	attribOffsets: [],
+	vertexIndexStride: 0,
+	
+	recalc: function() {
+		
+	},
 };
 */
