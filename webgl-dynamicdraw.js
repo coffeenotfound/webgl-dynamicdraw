@@ -44,11 +44,12 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 		inStartEnd: false,
 		currentPrimityMode: 0,
 		
-		recordArrayAttribOffsets: [],
-		recordArrayVertexStride: 0,
-		recordArrayStartPos: 0,
 		recordArrayPos: 0,
-		activeAttribNum: 0,
+		recordArrayStartPos: 0,
+		recordArrayVertexStride: 0,
+		recordArrayPrimitiveStride: 0,
+		recordArrayAttribOffsets: [],
+		recordAraryVertexIndex: 0,
 	},
 	
 	/** Starts recording vertices with the given  */
@@ -72,6 +73,15 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 			else {
 				this.state.recordArrayAttribOffsets[i] = -1;
 			}
+		}
+		
+		// calc recordArrayPrimitiveStride
+		switch(primitivemode) {
+			case gl.TRIANGLES: this.state.recordArrayPrimitiveStride = 3; break;
+			case gl.POINTS: this.state.recordArrayPrimitiveStride = 1; break;
+			case gl.LINES: this.state.recordArrayPrimitiveStride = 2; break;
+			case gl.QUADS: this.state.recordArrayPrimitiveStride = 4; break;
+			default: throw "unimplemented primitive stride";
 		}
 		
 		this.state.recordArrayStartPos = this.state.recordArrayPos;
@@ -98,34 +108,26 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 		var attrib = this.state.attribs[index];
 		if(!attrib || !attrib.enabled) throw "invalid attrib index: attrib " + index + " invalid or disabled";
 		
-		// check if recordarray has enough space for entire vertex index (all active attribs)
-		var newRecordArrayPos = this.state.recordArrayPos + this.state.recordArrayVertexStride;
+		// put vertex
+		var writeOffset = this.state.recordArrayPos + this.state.recordArrayAttribOffsets[index];
+		this.state.recordArray[writeOffset + 0] = x;
+		this.state.recordArray[writeOffset + 1] = y;
+		this.state.recordArray[writeOffset + 2] = z;
 		
-		if(newRecordArrayPos <= this.state.recordArray.length) {
-			// write to array
-			var writePos = this.state.recordArrayPos;
-			var recordArray = this.state.recordArray;
-			recordArray[writePos] = x;
-			recordArray[writePos + 1] = y;
-			recordArray[writePos + 2] = z;
+		// increment pos if attrib 0 (0 is the incrementing attrib)
+		if(index == 0) {
+			this.state.recordArrayPos += this.state.recordArrayVertexStride;
 			
-			// only increment on attrib 0
-			if(index == 0) {
-				this.state.recordArrayPos = newRecordArrayPos;
+			// if full, trigger draw and clear for next vertex add
+			if(this.state.recordArrayPos > this.state.recordArray.length) {
+				var drawFirst = this.state.recordArrayStartPos;
+				var drawCount = this.state.recordArrayPos - this.state.recordArrayStartPos;
+				this._flushDraw(drawFirst, drawCount);
+				
+				// reset recordArray
+				this.state.recordArrayStartPos = 0;
+				this.state.recordArrayPos = 0;
 			}
-		}
-		else { // recordArray full
-			// draw
-			var drawFirst = this.state.recordArrayStartPos;
-			var drawCount = this.state.recordArrayPos - this.state.recordArrayStartPos;
-			this._flushDraw(drawFirst, drawCount);
-			
-			// reset recordArray
-			this.state.recordArrayStartPos = 0;
-			this.state.recordArrayPos = 0;
-			
-			// add to new buffer
-			this.addVertex3(index, x, y, z);
 		}
 	},
 	
@@ -156,7 +158,6 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 		attrib.enabled = enabled;
 	},
 	
-	
 	/** Initializes or re-initialized this context with the current state. */
 	init: function() {
 		
@@ -170,6 +171,9 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 			this.state.buffer = gl.createBuffer();
 			gl.bindBuffer(gl.ARRAY_BUFFER, this.state.buffer);
 			gl.bufferData(gl.ARRAY_BUFFER, this.state.bufferSize*this.state.bufferTypeBytes, gl.DYNAMIC_DRAW);
+			
+			// DEBUG: log
+			console.debug("created buffer " + this.state.buffer);
 		}
 		
 		// bind buffer
@@ -204,11 +208,12 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 			componentsToDraw -= numIndicesCanDrawNow * this.state.recordArrayVertexStride;
 			
 			// orphan
-			if(componentsToDraw > 0) {
+			if(componentsToDraw >= 0) {
 				//gl.bufferData(gl.ARRAY_BUFFER, null, gl.DYNAMIC_DRAW);
 				gl.bufferData(gl.ARRAY_BUFFER, this.state.bufferSize*this.state.bufferTypeBytes, gl.DYNAMIC_DRAW);
 				
 				this.state.bufferPos = 0;
+				continue;
 			}
 		}
 	},
