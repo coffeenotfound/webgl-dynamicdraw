@@ -13,6 +13,7 @@ var WebGLDynamicDraw = {
 	},
 };
 
+
 // context contains cached state
 WebGLDynamicDraw.DynamicDrawContext = function(gl) {
 	this.gl = gl;
