@@ -49,6 +49,7 @@ WebGLDynamicDraw.DynamicDrawContext = function(gl) {
 	
 	// DEBUG: log
 	console.debug("created DynamicDrawContext:", this);
+	console.debug("support OES_vertex_array_object=" + (this.OESVertexArrayObject !== null));
 };
 WebGLDynamicDraw.DynamicDrawContext.prototype = {
 	gl: null,
