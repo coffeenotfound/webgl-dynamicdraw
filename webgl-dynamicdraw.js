@@ -25,11 +25,17 @@ var WebGLDynamicDraw = {
 WebGLDynamicDraw.DynamicDrawContext = function(gl) {
 	this.gl = gl;
 	
+	// try create OES_vertex_array_object extension
+	this.OESVertexArrayObject = gl.getExtension("OES_vertex_array_object");
+	
 	// create recordArray
 	this.recordArray = new WebGLDynamicDraw.RecordArray(this, 256);
 	
 	// create drawBuffer
 	this.drawBuffer = new WebGLDynamicDraw.DrawBuffer(this, 256);
+	
+	// create vertexarray
+	this.vertexArrayOES = this.OESVertexArrayObject.createVertexArrayOES();
 	
 	// query max vertex attribs
 	this.maxVertexAttribs = this.gl.getParameter(this.gl.MAX_VERTEX_ATTRIBS);
@@ -46,8 +52,12 @@ WebGLDynamicDraw.DynamicDrawContext = function(gl) {
 };
 WebGLDynamicDraw.DynamicDrawContext.prototype = {
 	gl: null,
+	OESVertexArrayObject: null,
+	
 	recordArray: null,
 	drawBuffer: null,
+	
+	vertexArrayOES: 0,
 	
 	maxVertexAttribs: -1,
 	vertexAttribs: [],
