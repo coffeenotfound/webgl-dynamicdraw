@@ -120,12 +120,14 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 		var attrib = this.vertexAttribs[index];
 		
 		attrib.update(size, type, normalized);
+		attrib.dirtyGL = true;
 	},
 	
 	enableVertexAttrib: function(index, enabled) {
 		var attrib = this.vertexAttribs[index];
 		
 		attrib.enabled = enabled;
+		attrib.dirtyGL = true;
 	},
 	
 	incrementingVertexAttrib: function(index) {
@@ -261,6 +263,8 @@ WebGLDynamicDraw.VertexAttrib.prototype = {
 	normalized: false,
 	
 	enabled: false,
+	
+	dirtyGL: false,
 	
 	update: function(size, type, normalized) {
 		this.size = size;
