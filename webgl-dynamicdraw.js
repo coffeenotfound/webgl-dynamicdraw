@@ -58,7 +58,7 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 	recordArray: null,
 	drawBuffer: null,
 	
-	vertexArrayOES: 0,
+	vertexArrayOES: null,
 	
 	maxVertexAttribs: -1,
 	vertexAttribs: [],
@@ -87,7 +87,7 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 		cgl.bufferData(cgl.ARRAY_BUFFER, this.recordArray.array, cgl.STREAM_DRAW);
 		
 		// setup vertexattribs
-		if(this.vertexArrayOES != 0) {
+		if(this.vertexArrayOES) {
 			this.OESVertexArrayObject.bindVertexArrayOES(this.vertexArrayOES);
 			
 			for(var i = 0; i < this.vertexAttribs.length; i++) {
@@ -127,8 +127,8 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 		cgl.drawArrays(this.currentPrimitiveMode, 0, primitivesToDraw);
 		
 		// unbind vertexarray
-		if(this.vertexArrayOES != 0) {
-			this.OESVertexArrayObject.bindVertexArrayOES(0);
+		if(this.vertexArrayOES) {
+			this.OESVertexArrayObject.bindVertexArrayOES(null);
 		}
 	},
 	
