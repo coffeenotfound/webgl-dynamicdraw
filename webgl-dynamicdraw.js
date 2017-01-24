@@ -25,11 +25,17 @@ var WebGLDynamicDraw = {
 WebGLDynamicDraw.DynamicDrawContext = function(gl) {
 	this.gl = gl;
 	
+	// try create OES_vertex_array_object extension
+	this.OESVertexArrayObject = gl.getExtension("OES_vertex_array_object");
+	
 	// create recordArray
 	this.recordArray = new WebGLDynamicDraw.RecordArray(this, 256);
 	
 	// create drawBuffer
 	this.drawBuffer = new WebGLDynamicDraw.DrawBuffer(this, 256);
+	
+	// create vertexarray
+	this.vertexArrayOES = this.OESVertexArrayObject.createVertexArrayOES();
 	
 	// query max vertex attribs
 	this.maxVertexAttribs = this.gl.getParameter(this.gl.MAX_VERTEX_ATTRIBS);
@@ -43,11 +49,16 @@ WebGLDynamicDraw.DynamicDrawContext = function(gl) {
 	
 	// DEBUG: log
 	console.debug("created DynamicDrawContext:", this);
+	console.debug("support OES_vertex_array_object=" + (this.OESVertexArrayObject !== null));
 };
 WebGLDynamicDraw.DynamicDrawContext.prototype = {
 	gl: null,
+	OESVertexArrayObject: null,
+	
 	recordArray: null,
 	drawBuffer: null,
+	
+	vertexArrayOES: null,
 	
 	maxVertexAttribs: -1,
 	vertexAttribs: [],
@@ -76,15 +87,37 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 		cgl.bufferData(cgl.ARRAY_BUFFER, this.recordArray.array, cgl.STREAM_DRAW);
 		
 		// setup vertexattribs
-		for(var i = 0; i < this.vertexAttribs.length; i++) {
-			var attrib = this.vertexAttribs[i];
+		if(this.vertexArrayOES) {
+			this.OESVertexArrayObject.bindVertexArrayOES(this.vertexArrayOES);
 			
-			if(attrib.enabled) {
-				cgl.enableVertexAttribArray(i);
-				cgl.vertexAttribPointer(i, attrib.size, attrib.type, attrib.normalized, this.recordArray.tempVertexIndexStride*4, this.recordArray.tempAttribOffset[i]*4);
+			for(var i = 0; i < this.vertexAttribs.length; i++) {
+				var attrib = this.vertexAttribs[i];
+				
+				if(attrib.dirtyGL) {
+					if(attrib.enabled) {
+						cgl.enableVertexAttribArray(i);
+						cgl.vertexAttribPointer(i, attrib.size, attrib.type, attrib.normalized, this.recordArray.tempVertexIndexStride*4, this.recordArray.tempAttribOffset[i]*4);
+					}
+					else {
+						cgl.disableVertexAttribArray(i);
+					}
+					
+					// reset dirty flag
+					attrib.dirtyGL = false;
+				}
 			}
-			else {
-				cgl.disableVertexAttribArray(i);
+		}
+		else {
+			for(var i = 0; i < this.vertexAttribs.length; i++) {
+				var attrib = this.vertexAttribs[i];
+				
+				if(attrib.enabled) {
+					cgl.enableVertexAttribArray(i);
+					cgl.vertexAttribPointer(i, attrib.size, attrib.type, attrib.normalized, this.recordArray.tempVertexIndexStride*4, this.recordArray.tempAttribOffset[i]*4);
+				}
+				else {
+					cgl.disableVertexAttribArray(i);
+				}
 			}
 		}
 		
@@ -92,6 +125,11 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 		var primitivesToDraw = this.recordArray.position / this.recordArray.tempVertexIndexStride;
 		
 		cgl.drawArrays(this.currentPrimitiveMode, 0, primitivesToDraw);
+		
+		// unbind vertexarray
+		if(this.vertexArrayOES) {
+			this.OESVertexArrayObject.bindVertexArrayOES(null);
+		}
 	},
 	
 	/** Adds a vertex with three components to the vertex attribute attrib */
@@ -110,12 +148,14 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 		var attrib = this.vertexAttribs[index];
 		
 		attrib.update(size, type, normalized);
+		attrib.dirtyGL = true;
 	},
 	
 	enableVertexAttrib: function(index, enabled) {
 		var attrib = this.vertexAttribs[index];
 		
 		attrib.enabled = enabled;
+		attrib.dirtyGL = true;
 	},
 	
 	incrementingVertexAttrib: function(index) {
@@ -251,6 +291,8 @@ WebGLDynamicDraw.VertexAttrib.prototype = {
 	normalized: false,
 	
 	enabled: false,
+	
+	dirtyGL: false,
 	
 	update: function(size, type, normalized) {
 		this.size = size;
