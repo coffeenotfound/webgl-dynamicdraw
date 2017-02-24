@@ -26,7 +26,19 @@ WebGLDynamicDraw.DynamicDrawContext = function(gl) {
 	this.gl = gl;
 	
 	// try create OES_vertex_array_object extension
-	this.OESVertexArrayObject = gl.getExtension("OES_vertex_array_object");
+	if(this.gl.createVertexArray !== undefined) {
+		this._useVertexArrayOES = false;
+		
+		// DEBUG: log
+		console.log("GLDD: USE WEBGL2 createVertexArray");
+	}
+	else {
+		this._useVertexArrayOES = true;
+		this.OESVertexArrayObject = gl.getExtension("OES_vertex_array_object");
+		
+		// DEBUG: log
+		console.log("GLDD: USE EXTENSION createVertexArrayOES");
+	}
 	
 	// create recordArray
 	this.recordArray = new WebGLDynamicDraw.RecordArray(this, 256);
@@ -35,7 +47,14 @@ WebGLDynamicDraw.DynamicDrawContext = function(gl) {
 	this.drawBuffer = new WebGLDynamicDraw.DrawBuffer(this, 256);
 	
 	// create vertexarray
-	this.vertexArrayOES = this.OESVertexArrayObject.createVertexArrayOES();
+	if(this._useVertexArrayOES) {
+		if(this.OESVertexArrayObject) {
+			this.vertexArray = this.OESVertexArrayObject.createVertexArrayOES();
+		}
+	}
+	else {
+		this.vertexArray = this.gl.createVertexArray();
+	}
 	
 	// query max vertex attribs
 	this.maxVertexAttribs = this.gl.getParameter(this.gl.MAX_VERTEX_ATTRIBS);
@@ -58,7 +77,8 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 	recordArray: null,
 	drawBuffer: null,
 	
-	vertexArrayOES: null,
+	vertexArray: null,
+	_useVertexArrayOES: false,
 	
 	maxVertexAttribs: -1,
 	vertexAttribs: [],
@@ -87,8 +107,9 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 		cgl.bufferData(cgl.ARRAY_BUFFER, this.recordArray.array, cgl.STREAM_DRAW);
 		
 		// setup vertexattribs
-		if(this.vertexArrayOES) {
-			this.OESVertexArrayObject.bindVertexArrayOES(this.vertexArrayOES);
+		if(this.vertexArray) {
+			// bind vao
+			this._bindVertexArray(this.vertexArray);
 			
 			for(var i = 0; i < this.vertexAttribs.length; i++) {
 				var attrib = this.vertexAttribs[i];
@@ -127,8 +148,8 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 		cgl.drawArrays(this.currentPrimitiveMode, 0, primitivesToDraw);
 		
 		// unbind vertexarray
-		if(this.vertexArrayOES) {
-			this.OESVertexArrayObject.bindVertexArrayOES(null);
+		if(this.vertexArray) {
+			this._bindVertexArray(null);
 		}
 	},
 	
@@ -166,6 +187,15 @@ WebGLDynamicDraw.DynamicDrawContext.prototype = {
 	
 	_destroy: function() {
 		
+	},
+	
+	_bindVertexArray: function(vao_) {
+		if(this._useVertexArrayOES) {
+			this.OESVertexArrayObject.bindVertexArrayOES(vao_);
+		}
+		else {
+			this.gl.bindVertexArray(vao_);
+		}
 	},
 };
 
